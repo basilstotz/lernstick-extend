@@ -29,7 +29,7 @@ do_extract(){
 
     QUELLISO=$1
 
-    
+    return    
     echo -n "info: cleanup isofiles ..."
     if test -d ./isofiles;then
       chmod +w -R ./isofiles
@@ -118,35 +118,72 @@ do_mount(){
 }
 
 do_chroot(){
-    mount -o bind /dev $CHROOT/dev
-    mount -o bind /dev/pts $CHROOT/dev/pts
-    mount -o bind /proc $CHROOT/proc
-    mount -o bind /sys $CHROOT/sys
+#    mount -o bind /dev $CHROOT/dev
+#    mount -o bind /dev/pts $CHROOT/dev/pts
+#    mount -o bind /proc $CHROOT/proc
+#    mount -o bind /sys $CHROOT/sys
 
-    chroot $CHROOT
+    
+        mount --bind /dev ${CHROOT}/dev
+        mount --bind /proc ${CHROOT}/proc
+        mount --bind /sys ${CHROOT}/sys
+        mount --bind /dev/pts ${CHROOT}/dev/pts
 
-    umount  ${CHROOT}/proc
-    umount  ${CHROOT}/dev/pts
-    umount  ${CHROOT}/dev
-    umount  ${CHROOT}/sys
+        echo "Backup the overlay/etc/hosts."
+        mv ${CHROOT}/etc/hosts ./hosts.bak
+        echo "Copying /etc/hosts to overlay/etc/hosts."
+        cp /etc/hosts ${CHROOT}/etc/hosts
+
+        echo "Backup the overlay/etc/resolv.conf."
+        mv ${CHROOT}/etc/resolv.conf ./resolv.conf.bak
+        echo "Copying /etc/resolv.conf to the overlay/etc/resolv.conf."
+        cp /etc/resolv.conf ${CHROOT}/etc/resolv.conf
+
+        echo "Starting chroot in the overlay directory."
+        chroot ${CHROOT} /bin/bash
+
+        echo "Exited the chroot so time to clean up."
+        umount -l ${CHROOT}/dev
+        umount -l ${CHROOT}/proc
+        umount -l ${CHROOT}/sys
+
+        echo "Restore original overlay/etc/hosts."
+        mv ./hosts.bak ${CHROOT}/etc/hosts
+        echo "Restore overlay/etc/resolv.conf."
+        mv ./resolv.conf.bak ${CHROOT}/etc/resolv.conf
+        echo "Remove overlay/root/.bash_history."
+        rm ${CHROOT}/root/.bash_history
+
+    
+#    chroot $CHROOT
+
+#    umount  ${CHROOT}/proc
+#    umount  ${CHROOT}/dev/pts
+#    umount  ${CHROOT}/dev
+#    umount  ${CHROOT}/sys
 }
 
 
 do_patch(){
+    echo $CHROOT
+    ls $CHROOT
     PLACE=opt/puavo-os-extra
 
     #copy data to chroot
     echo "info: copy patchdir to chroot" 1>&2
-    mkdir -p $CHROOT/$PLACE
-    cp -r $1/* $CHROOT/$PLACE
+    #mkdir -p $CHROOT/$PLACE
+    #cp -r $1/* $CHROOT/$PLACE
 
     #copy cached apt to chroot
     echo "info: copy apt from cache to chroot"                                           1>&2
-    rsync -ra  --size-only ./cache/apt/ $CHROOT/var/cache/apt/archives/.
+    #rsync -ra  --size-only ./cache/apt/ $CHROOT/var/cache/apt/archives/.
 
     # do chroot
     echo "info: enter chroot"                                                            1>&2
-    echo "run-parts --regex=\"^[0-9]{2}-.*$\" /$PLACE" | do_chroot $CHROOT
+    #echo "run-parts /$PLACE" |
+
+    do_chroot $CHROOT
+
     if test $? -ne 0;then
        echo "could not patch \"$1\""                                                     1>&2
        exit 1
@@ -155,7 +192,7 @@ do_patch(){
 
     # copyback apt and clean chroot
     echo "info: update apt cache"                                                        1>&2
-    rsync -rav  --delete --size-only  $CHROOT/var/cache/apt/archives/ ./cache/apt/       1>&2
+    #rsync -rav  --delete --size-only  $CHROOT/var/cache/apt/archives/ ./cache/apt/       1>&2
     echo "info: remove apt in chroot"                                                    1>&2
     rm -r $CHROOT/var/cache/apt/archives/*
 
@@ -243,16 +280,56 @@ LIVE="isofiles/live/filesystem.squashfs"
 
 do_mount  $LIVE
 
+
+#echo $CHROOT
+#ls -lh $CHROOT
+
 IMAGE=filesystem-remaster.squashfs
 
+#do_chroot $CHROOT
+
 #do_patch  $DATADIR > ./log/$IMAGE.log
+
+    PLACE=opt/puavo-os-extra
+
+    copy data to chroot
+    echo "info: copy patchdir to chroot" 1>&2
+    mkdir -p $CHROOT/$PLACE
+    cp -r $1/* $CHROOT/$PLACE
+
+    #copy cached apt to chroot
+    echo "info: copy apt from cache to chroot"                                           1>&2
+    rsync -ra  --size-only ./cache/apt/ $CHROOT/var/cache/apt/archives/.
+
+    # do chroot
+    echo "info: enter chroot"                                                            1>&2
+    #echo "run-parts /$PLACE" | 
+
+    do_chroot $CHROOT
+
+    if test $? -ne 0;then
+       echo "could not patch \"$1\""                                                     1>&2
+       exit 1
+    fi
+    echo "info: exit chroot"                                                             1>&2
+
+    # copyback apt and clean chroot
+    echo "info: update apt cache"                                                        1>&2
+    rsync -rav  --delete --size-only  $CHROOT/var/cache/apt/archives/ ./cache/apt/       1>&2
+    echo "info: remove apt in chroot"                                                    1>&2
+    rm -r $CHROOT/var/cache/apt/archives/*
+
+    rm -r $CHROOT/$PLACE/*
+    cp -r $1/* $CHROOT/$PLACE
+
+
 
 do_image $IMAGE
 
 
 chmod +w $LIVE
 mv $LIVE $(basename $LIVE)
-mv filesystem-remaster.squashfs $LIVE
+mv $IMAGE $LIVE
 chmod -w $LIVE
 
 do_compose $SOURCE
