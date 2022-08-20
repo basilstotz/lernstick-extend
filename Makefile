@@ -2,12 +2,13 @@
 SOURCE:=/home/user/iso-lernstick/lernstick_debian11_latest.iso
 PATCH:="patch"
 
-all: copy patch
-
 copy:
 	@find patch/basis/debs.d/ -type f  -exec rm \{\} \;
 	@cp ~/git/ltsp-org-updater/ltsp-org-updater_*_amd64.deb patch/basis/debs.d/.
 	@cp ~/git/lernstick-ltsp/lernstick-ltsp_*_amd64.deb patch/basis/debs.d/.
+
+all: copy patch
+
 script:
 	@./bin/make-chroot-script $(PATCH) > install-patch-script.sh
 	@chmod +x install-patch-script.sh
